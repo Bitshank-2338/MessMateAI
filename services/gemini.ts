@@ -2,8 +2,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult, CrisisSuggestion, UserProfile, DayPlan, AIMode, ChatMessage, WorkoutSession, WorkoutLocation, PhysiqueAnalysis } from "../types";
 
 // Initialize Gemini client
-// Using import.meta.env for Vite support, falling back to process.env if needed (though process.env is mocked to {} in vite.config)
-const apiKey = (import.meta as any).env?.VITE_API_KEY || process.env.API_KEY;
+// Using import.meta.env for Vite support
+const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY || ''; 
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
 // Helper to convert file to base64
