@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Logo } from './Logo';
-import { Phone, ArrowRight, Loader2, CheckCircle, ShieldCheck, Mail, Lock, AlertCircle } from 'lucide-react';
+import { ArrowRight, Loader2, CheckCircle, ShieldCheck, Mail, Lock, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface LandingPageProps {
@@ -26,9 +26,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           password,
         });
         if (error) throw error;
-        // Auto login or prompt check email? Supabase default often requires email confirmation unless disabled.
-        // Assuming default behavior might require confirmation, but often developers disable it for prototypes.
-        // If it succeeds but session is null, it means email confirmation is needed.
         alert('Check your email for the confirmation link!');
       } else {
         const { error } = await supabase.auth.signInWithPassword({
