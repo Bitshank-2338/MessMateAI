@@ -2,6 +2,7 @@
   "name": "MessMate AI",
   "description": "A smart dietary tracking app for students, featuring meal analysis via Gemini, vegetarian/non-veg support, and mess crisis management.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "microphone"
   ]
 }

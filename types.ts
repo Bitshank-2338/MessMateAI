@@ -35,7 +35,12 @@ export interface UserProfile {
   // Basic
   name: string;
   location: string;
+  avatarUrl?: string;
   
+  // Subscription
+  createdAt?: string; // ISO Date string of account creation
+  isPremium?: boolean; // Payment status
+
   // Physical Metrics
   age: number | '';
   height: number | ''; // cm

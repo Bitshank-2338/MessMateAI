@@ -1,11 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Optimized Vite config: No Node.js path aliases to ensure compatibility with web containers
 export default defineConfig({
   plugins: [react()],
-  define: {
-    // This trick mocks the "process" variable for the browser
-    'process.env': {}
+  root: '.',
+  base: './',
+  server: {
+    host: true,
+    port: 3000
   },
-  base: './' // Ensures assets load correctly from any folder
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true
+  }
 })

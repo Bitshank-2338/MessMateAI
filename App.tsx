@@ -9,8 +9,9 @@ import { AIHealthLab } from './components/AIHealthLab';
 import { WorkoutEngine } from './components/WorkoutEngine';
 import { LandingPage } from './components/LandingPage';
 import { Logo } from './components/Logo';
+import { LivePulse } from './components/LivePulse';
 import { MealLog, UserProfile } from './types';
-import { PieChart, User, CalendarDays, Sparkles, Dumbbell, LogOut } from 'lucide-react';
+import { PieChart, User, CalendarDays, Sparkles, Dumbbell, LogOut, Crown } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -29,7 +30,9 @@ const DEFAULT_PROFILE: UserProfile = {
   messMealsPerDay: 2,
   budget: 'Moderate',
   cookingSetup: 'Kettle Only',
-  dailyWaterGoal: 3
+  dailyWaterGoal: 3,
+  avatarUrl: '',
+  isPremium: false
 };
 
 function App() {
@@ -39,19 +42,24 @@ function App() {
   const [isOffline, setIsOffline] = useState(false);
 
   const [logs, setLogs] = useState<MealLog[]>([]);
-  // Stores daily water intake in Liters. Key is YYYY-MM-DD
   const [waterLogs, setWaterLogs] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('mahaVegWater');
     return saved ? JSON.parse(saved) : {};
   });
 
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
-  const [showInfo, setShowInfo] = useState(false);
   const [currentView, setCurrentView] = useState<'tracker' | 'history' | 'profile' | 'plan' | 'ailab' | 'workout'>('tracker');
 
-  // Supabase Auth & Data Sync
+  // Live Pulse State
+  const [isLiveOpen, setIsLiveOpen] = useState(false);
+  const [liveContext, setLiveContext] = useState('');
+
+  const handleOpenLive = (context: string) => {
+    setLiveContext(context);
+    setIsLiveOpen(true);
+  };
+
   useEffect(() => {
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setIsAuthenticated(true);
@@ -81,7 +89,6 @@ function App() {
   const fetchData = async (uid: string) => {
     setIsOffline(false);
     try {
-      // Fetch Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -92,6 +99,12 @@ function App() {
         const mappedProfile: UserProfile = {
           name: profileData.name || '',
           location: profileData.location || 'Pune',
+          avatarUrl: profileData.avatar_url || '',
+          
+          // Subscription mapping
+          createdAt: profileData.created_at || new Date().toISOString(), 
+          isPremium: profileData.is_premium || false,
+
           dietType: profileData.diet_type || 'Vegetarian',
           avoidances: profileData.avoidances || '',
           age: profileData.age || '',
@@ -110,7 +123,6 @@ function App() {
         setProfile(mappedProfile);
       }
 
-      // Fetch Logs
       const { data: logsData, error: logsError } = await supabase
         .from('daily_logs')
         .select('*')
@@ -150,13 +162,11 @@ function App() {
 
   const addLog = async (log: MealLog) => {
     if (!userId) return;
-    
-    // Optimistic update
     setLogs(prev => [log, ...prev]);
 
     try {
       const { error } = await supabase.from('daily_logs').insert({
-        id: log.id, // Important: Sync local ID with DB ID for immediate deletion support
+        id: log.id,
         user_id: userId,
         date: log.dateStr,
         description: log.description,
@@ -168,7 +178,6 @@ function App() {
         meal_items: log.items,
         created_at: new Date(log.timestamp).toISOString()
       });
-
       if (error) throw error;
     } catch (err) {
       console.error("Failed to sync log:", err);
@@ -187,7 +196,7 @@ function App() {
 
   const updateWaterGoal = async (goal: number) => {
     const newProfile = { ...profile, dailyWaterGoal: goal };
-    setProfile(newProfile); // Optimistic
+    setProfile(newProfile);
     
     if (userId) {
        await supabase.from('profiles').upsert({
@@ -223,6 +232,7 @@ function App() {
           id: userId,
           name: newProfile.name,
           location: newProfile.location,
+          avatar_url: newProfile.avatarUrl,
           diet_type: newProfile.dietType,
           avoidances: newProfile.avoidances,
           age: newProfile.age === '' ? null : newProfile.age,
@@ -247,6 +257,46 @@ function App() {
     }
   };
 
+  // Subscription Logic
+  const getSubscriptionStatus = () => {
+    if (profile.isPremium) return { hasAccess: true, label: 'Premium', daysLeft: Infinity };
+    
+    const createdDate = new Date(profile.createdAt || Date.now());
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - createdDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    const trialDays = 15;
+    const daysLeft = Math.max(0, trialDays - diffDays);
+    
+    return {
+      hasAccess: daysLeft > 0,
+      label: daysLeft > 0 ? 'Free Trial' : 'Expired',
+      daysLeft
+    };
+  };
+
+  const subStatus = getSubscriptionStatus();
+
+  const handleUpgrade = async () => {
+    if (!userId) return;
+    
+    // Optimistic Update
+    const newProfile = { ...profile, isPremium: true };
+    setProfile(newProfile);
+
+    try {
+      // Try to update on server, ignore error if column doesn't exist (simulated environment)
+      await supabase.from('profiles').upsert({
+        id: userId,
+        is_premium: true,
+        updated_at: new Date().toISOString()
+      });
+      alert("Upgrade Successful! You now have lifetime access.");
+    } catch (err) {
+      console.warn("Could not persist premium status to DB (likely schema mismatch), but local session is premium.");
+    }
+  };
+
   const toggleDiet = () => {
     const isVeg = profile.dietType === 'Vegetarian';
     const newDiet = isVeg ? 'Non-Vegetarian' : 'Vegetarian';
@@ -258,10 +308,6 @@ function App() {
                        profile.dietType === 'Jain' || 
                        profile.dietType === 'Vegan';
 
-  const handleLogin = () => {
-    // This is just a callback for LandingPage, actual state handled by onAuthStateChange
-  };
-  
   const handleLogout = async () => {
      await supabase.auth.signOut();
   };
@@ -273,31 +319,44 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <LandingPage onLogin={handleLogin} />;
+    return <LandingPage onLogin={() => {}} />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
-      {/* Offline Banner */}
+      <LivePulse 
+        isOpen={isLiveOpen} 
+        onClose={() => setIsLiveOpen(false)} 
+        context={liveContext}
+        profile={profile}
+      />
+
       {isOffline && (
-        <div className="bg-red-500 text-white text-xs font-bold text-center py-1">
+        <div className="bg-red-500 text-white text-xs font-bold text-center py-1 pt-safe">
           ⚠️ Offline Mode / Sync Error - Check Connection
         </div>
       )}
 
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm pt-safe transition-all">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCurrentView('tracker')}>
             <Logo />
             <h1 className="text-xl font-bold text-gray-800 hidden sm:block">
               MessMate <span className="text-indigo-600">AI</span>
             </h1>
+            {profile.isPremium && (
+               <span className="bg-yellow-100 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-yellow-200 flex items-center gap-1">
+                 <Crown className="w-3 h-3" /> PRO
+               </span>
+            )}
+            {!profile.isPremium && subStatus.hasAccess && (
+               <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                 {subStatus.daysLeft}d Left
+               </span>
+            )}
           </div>
           
           <nav className="flex items-center gap-1 sm:gap-2">
-            
-            {/* Diet Toggle Switch */}
             <div 
               onClick={toggleDiet}
               className={`relative w-12 h-6 rounded-full transition-colors duration-300 cursor-pointer flex items-center ${isVegetarian ? 'bg-green-500' : 'bg-red-500'} mr-2`}
@@ -340,10 +399,24 @@ function App() {
             </button>
             <button
               onClick={() => setCurrentView('profile')}
-              className={`p-2 rounded-lg flex items-center gap-2 text-sm font-medium transition ${currentView === 'profile' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              className={`relative rounded-full transition-all duration-200 ${
+                currentView === 'profile' 
+                  ? 'ring-2 ring-indigo-600 ring-offset-2' 
+                  : 'hover:opacity-80'
+              }`}
               title="Profile"
             >
-              <User className="w-4 h-4" />
+              {profile.avatarUrl ? (
+                <img 
+                  src={profile.avatarUrl} 
+                  alt={profile.name} 
+                  className="w-9 h-9 rounded-full object-cover bg-gray-200 border border-gray-100" 
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
+                  <User className="w-5 h-5" />
+                </div>
+              )}
             </button>
             <button
               onClick={handleLogout}
@@ -356,37 +429,35 @@ function App() {
         </div>
       </header>
 
-      {/* Info Banner */}
-      {showInfo && (
-        <div className="bg-indigo-600 text-white p-4">
-          <div className="max-w-4xl mx-auto text-sm">
-            <p className="font-semibold mb-1">About MessMate AI</p>
-            <p className="opacity-90">
-              Designed for {profile.dietType.toLowerCase()} students in {profile.location}. 
-              {profile.avoidances && ` Avoiding: ${profile.avoidances}.`} Powered by Gemini.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-8">
-        
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-8 pb-safe">
         {currentView === 'tracker' && (
           <div className="animate-fade-in">
-             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Hello, {profile.name || 'Student'}! 👋</h2>
-              <p className="text-gray-600">
-                Tracking for: <span className="font-medium text-indigo-600">{profile.location}</span> • <span className={`font-medium ${isVegetarian ? 'text-green-600' : 'text-red-600'}`}>{profile.dietType}</span>
-              </p>
+             <div className="mb-8 flex items-center gap-4">
+               <div className="shrink-0">
+                  {profile.avatarUrl ? (
+                    <img 
+                      src={profile.avatarUrl} 
+                      alt="Profile" 
+                      className="w-16 h-16 rounded-full object-cover border-4 border-white shadow-md"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-100 to-white flex items-center justify-center text-indigo-300 border-4 border-white shadow-md">
+                      <User className="w-8 h-8" />
+                    </div>
+                  )}
+               </div>
+               <div>
+                  <h2 className="text-2xl font-bold text-gray-900 leading-tight">
+                    Hello, {profile.name || 'Student'}! 👋
+                  </h2>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Tracking for: <span className="font-medium text-indigo-600">{profile.location}</span> • <span className={`font-medium ${isVegetarian ? 'text-green-600' : 'text-red-600'}`}>{profile.dietType}</span>
+                  </p>
+               </div>
             </div>
-
-            <MessCrisis profile={profile} />
-
-            <MealAnalyzer onLogMeal={addLog} userProfile={profile} />
-
+            <MessCrisis profile={profile} onOpenLive={() => handleOpenLive("Help me find food during a Mess Crisis.")} />
+            <MealAnalyzer onLogMeal={addLog} userProfile={profile} onOpenLive={() => handleOpenLive("I am analyzing a meal photo. Help me estimate calories.")} />
             <div className="my-8 border-t border-gray-200"></div>
-
             <DailyTracker 
               logs={logs} 
               waterLogs={waterLogs}
@@ -398,29 +469,35 @@ function App() {
             />
           </div>
         )}
-
         {currentView === 'plan' && (
           <div className="animate-fade-in">
-             <WeeklyMealPlan profile={profile} />
+             <WeeklyMealPlan 
+               profile={profile} 
+               onOpenLive={() => handleOpenLive("I need help with my weekly meal plan.")} 
+               hasAccess={subStatus.hasAccess}
+               onUpgrade={handleUpgrade}
+             />
           </div>
         )}
-
         {currentView === 'workout' && (
           <div className="animate-fade-in">
-             <WorkoutEngine profile={profile} />
+             <WorkoutEngine 
+               profile={profile} 
+               onOpenLive={() => handleOpenLive("I have questions about my workout routine and form.")} 
+               hasAccess={subStatus.hasAccess}
+               onUpgrade={handleUpgrade}
+             />
           </div>
         )}
-
         {currentView === 'ailab' && (
           <div className="animate-fade-in">
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-gray-900">AI Health Lab</h2>
               <p className="text-gray-600">Your personal {profile.location}-based nutrition & fitness expert.</p>
             </div>
-            <AIHealthLab profile={profile} />
+            <AIHealthLab profile={profile} onOpenLive={() => handleOpenLive("General health and fitness advice.")} />
           </div>
         )}
-
         {currentView === 'history' && (
           <div className="animate-fade-in">
              <div className="mb-6">
@@ -430,17 +507,15 @@ function App() {
             <HistoryTable logs={logs} />
           </div>
         )}
-
         {currentView === 'profile' && (
           <div className="animate-fade-in">
-            <div className="mb-6">
+            <div className="mb-6 text-center">
               <h2 className="text-2xl font-bold text-gray-900">Your Profile</h2>
               <p className="text-gray-600">Update your metrics to get science-backed advice (TDEE, Macros).</p>
             </div>
             <UserProfileForm currentProfile={profile} onSave={updateProfile} />
           </div>
         )}
-
       </main>
     </div>
   );

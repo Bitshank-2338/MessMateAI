@@ -1,20 +1,22 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, Loader2, Plus, X, AlertCircle, Trash2 } from 'lucide-react';
+import { Camera, Upload, Loader2, Plus, X, AlertCircle, Trash2, Mic } from 'lucide-react';
 import { analyzeMeal } from '../services/gemini';
 import { AnalysisResult, MealLog, UserProfile } from '../types';
 
 interface MealAnalyzerProps {
   onLogMeal: (log: MealLog) => void;
   userProfile: UserProfile;
+  onOpenLive?: () => void;
 }
 
-export const MealAnalyzer: React.FC<MealAnalyzerProps> = ({ onLogMeal, userProfile }) => {
+export const MealAnalyzer: React.FC<MealAnalyzerProps> = ({ onLogMeal, userProfile, onOpenLive }) => {
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,12 +85,54 @@ export const MealAnalyzer: React.FC<MealAnalyzerProps> = ({ onLogMeal, userProfi
     resetForm();
   };
 
+  const startDictation = () => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      setListening(true);
+
+      recognition.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setDescription((prev) => prev ? `${prev} ${text}` : text);
+        setListening(false);
+      };
+
+      recognition.onerror = () => {
+        setListening(false);
+        alert("Voice input failed. Please try again.");
+      };
+      
+      recognition.onend = () => {
+         setListening(false);
+      };
+
+      recognition.start();
+    } else {
+      alert("Voice input not supported in this browser.");
+    }
+  };
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-        <Camera className="w-5 h-5 text-indigo-600" />
-        Log a New Meal
-      </h2>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8 relative">
+      <div className="flex justify-between items-start mb-4">
+        <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+            <Camera className="w-5 h-5 text-indigo-600" />
+            Log a New Meal
+        </h2>
+        {onOpenLive && (
+            <button 
+                onClick={onOpenLive}
+                className="p-2 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition shadow-sm"
+                title="Talk to AI about this"
+            >
+                <Mic className="w-4 h-4" />
+            </button>
+        )}
+      </div>
 
       {/* Input Section - Fades out when loading */}
       <div className={`transition-opacity duration-300 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -125,9 +169,19 @@ export const MealAnalyzer: React.FC<MealAnalyzerProps> = ({ onLogMeal, userProfi
 
         {/* Description Input */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Description (Optional)
-          </label>
+          <div className="flex justify-between items-center mb-1">
+             <label className="block text-sm font-medium text-gray-700">
+                Description (Optional)
+            </label>
+            <button
+               onClick={startDictation}
+               className={`text-xs flex items-center gap-1 px-2 py-1 rounded transition ${listening ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+               title="Dictate description"
+            >
+               <Mic className="w-3 h-3" />
+               {listening ? 'Listening...' : 'Voice Input'}
+            </button>
+          </div>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}

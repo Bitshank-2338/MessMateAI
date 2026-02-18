@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, ChefHat, Dumbbell, AlertTriangle, User, Sparkles, X, Trash2, Download, Upload } from 'lucide-react';
+import { Send, Bot, ChefHat, Dumbbell, AlertTriangle, User, Sparkles, X, Trash2, Download, Upload, Mic } from 'lucide-react';
 import { ChatMessage, UserProfile, AIMode } from '../types';
 import { runHealthLabChat } from '../services/gemini';
 
 interface AIHealthLabProps {
   profile: UserProfile;
+  onOpenLive?: () => void;
 }
 
-export const AIHealthLab: React.FC<AIHealthLabProps> = ({ profile }) => {
+export const AIHealthLab: React.FC<AIHealthLabProps> = ({ profile, onOpenLive }) => {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem('messMateChatHistory');
@@ -32,6 +33,7 @@ export const AIHealthLab: React.FC<AIHealthLabProps> = ({ profile }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<AIMode>('general');
+  const [listening, setListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -123,6 +125,37 @@ export const AIHealthLab: React.FC<AIHealthLabProps> = ({ profile }) => {
     event.target.value = '';
   };
 
+  const startDictation = () => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      setListening(true);
+
+      recognition.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setInput((prev) => prev ? `${prev} ${text}` : text);
+        setListening(false);
+      };
+
+      recognition.onerror = () => {
+        setListening(false);
+        alert("Voice input failed. Please try again.");
+      };
+      
+      recognition.onend = () => {
+         setListening(false);
+      };
+
+      recognition.start();
+    } else {
+      alert("Voice input not supported in this browser.");
+    }
+  };
+
   return (
     <div className="flex flex-col h-[600px] bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative">
       {/* Header */}
@@ -144,6 +177,16 @@ export const AIHealthLab: React.FC<AIHealthLabProps> = ({ profile }) => {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {onOpenLive && (
+            <button
+               onClick={onOpenLive}
+               className="text-gray-400 hover:text-white hover:bg-white/10 p-2 rounded-lg transition"
+               title="Start Voice Conversation"
+            >
+              <Mic className="w-5 h-5" />
+            </button>
+          )}
+
           <button 
              onClick={() => fileInputRef.current?.click()} 
              className="text-gray-400 hover:text-white hover:bg-white/10 p-2 rounded-lg transition"
@@ -244,13 +287,20 @@ export const AIHealthLab: React.FC<AIHealthLabProps> = ({ profile }) => {
       {/* Input Area */}
       <div className="p-4 bg-white border-t border-gray-100 shrink-0">
         <div className="flex gap-2 relative">
+           <button
+             onClick={startDictation}
+             className={`p-3 rounded-xl transition shadow-sm border border-gray-200 shrink-0 ${listening ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+             title="Dictate message"
+           >
+             <Mic className="w-5 h-5" />
+           </button>
           <div className="relative flex-1">
              <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask anything... (e.g., 'What to eat with Matki?')"
+              placeholder="Ask anything..."
               className="w-full border border-gray-300 rounded-xl pl-4 pr-10 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50"
               disabled={loading}
             />

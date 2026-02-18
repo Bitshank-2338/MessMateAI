@@ -1,35 +1,73 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ChefHat, MapPin, Loader2, DollarSign } from 'lucide-react';
+import { AlertTriangle, ChefHat, MapPin, Loader2, DollarSign, Mic, Search } from 'lucide-react';
 import { UserProfile, CrisisSuggestion } from '../types';
 import { getMessCrisisSuggestions } from '../services/gemini';
 
 interface MessCrisisProps {
   profile: UserProfile;
+  onOpenLive?: () => void;
 }
 
-export const MessCrisis: React.FC<MessCrisisProps> = ({ profile }) => {
+export const MessCrisis: React.FC<MessCrisisProps> = ({ profile, onOpenLive }) => {
   const [active, setActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<CrisisSuggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [customQuery, setCustomQuery] = useState('');
+  const [listening, setListening] = useState(false);
+
+  const fetchSuggestions = async (query?: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getMessCrisisSuggestions(profile, query);
+      setSuggestions(result);
+    } catch (e) {
+      setError("Failed to find suggestions. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleActivate = async () => {
     if (!active) {
       setActive(true);
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await getMessCrisisSuggestions(profile);
-        setSuggestions(result);
-      } catch (e) {
-        setError("Failed to find suggestions. Try again.");
-        setActive(false);
-      } finally {
-        setLoading(false);
+      if (suggestions.length === 0) {
+        await fetchSuggestions();
       }
     } else {
       setActive(false);
-      setSuggestions([]);
+    }
+  };
+
+  const startDictation = () => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      setListening(true);
+
+      recognition.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setCustomQuery((prev) => prev ? `${prev} ${text}` : text);
+        setListening(false);
+      };
+
+      recognition.onerror = () => {
+        setListening(false);
+        alert("Voice input failed. Please try again.");
+      };
+      
+      recognition.onend = () => {
+         setListening(false);
+      };
+
+      recognition.start();
+    } else {
+      alert("Voice input not supported in this browser.");
     }
   };
 
@@ -49,6 +87,14 @@ export const MessCrisis: React.FC<MessCrisisProps> = ({ profile }) => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+           {onOpenLive && active && (
+               <button 
+                    onClick={(e) => { e.stopPropagation(); onOpenLive(); }}
+                    className="p-2 rounded-full bg-orange-100 text-orange-600 hover:bg-orange-200 transition shadow-sm mr-2"
+               >
+                   <Mic className="w-4 h-4" />
+               </button>
+           )}
            <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${active ? 'bg-orange-500' : 'bg-gray-200'}`}>
              <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${active ? 'translate-x-6' : ''}`}></div>
            </div>
@@ -57,6 +103,31 @@ export const MessCrisis: React.FC<MessCrisisProps> = ({ profile }) => {
 
       {active && (
         <div className="px-6 pb-6 pt-2 animate-fade-in">
+          <div className="mb-4">
+             <div className="relative flex gap-2">
+                <input 
+                  type="text" 
+                  value={customQuery}
+                  onChange={(e) => setCustomQuery(e.target.value)}
+                  placeholder="e.g., I have 50 rupees, want spicy food..."
+                  className="flex-1 rounded-lg border border-orange-200 p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                  onKeyDown={(e) => e.key === 'Enter' && fetchSuggestions(customQuery)}
+                />
+                <button
+                    onClick={startDictation}
+                    className={`p-2 rounded-lg transition border border-orange-200 ${listening ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-white text-gray-600 hover:bg-orange-100'}`}
+                >
+                    <Mic className="w-4 h-4" />
+                </button>
+                <button 
+                   onClick={() => fetchSuggestions(customQuery)}
+                   className="bg-orange-500 text-white p-2 rounded-lg hover:bg-orange-600 transition"
+                >
+                   <Search className="w-4 h-4" />
+                </button>
+             </div>
+          </div>
+
           <div className="text-sm text-orange-700 mb-4 bg-orange-100 p-3 rounded-lg border border-orange-200 flex items-start gap-2">
              <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
              Finding cheap, high-protein <strong>{profile.dietType.toLowerCase()}</strong> options near <strong>{profile.location || 'Pune'}</strong>...

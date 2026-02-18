@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, MapPin, Save, XCircle, Activity, Target, Flame, Wallet, Utensils, Droplets, Upload, Loader2 } from 'lucide-react';
+import { User, MapPin, Save, XCircle, Activity, Target, Flame, Wallet, Utensils, Droplets, Upload, Loader2, Camera } from 'lucide-react';
 import { UserProfile } from '../types';
 import { analyzePhysique } from '../services/gemini';
 
@@ -13,6 +13,7 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ currentProfile
   const [saved, setSaved] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setFormData(currentProfile);
@@ -27,6 +28,18 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ currentProfile
       [name]: type === 'number' ? (value === '' ? '' : Number(value)) : value,
     }));
     setSaved(false);
+  };
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, avatarUrl: reader.result as string }));
+        setSaved(false);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,6 +70,45 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ currentProfile
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto">
       
+      {/* Avatar Section */}
+      <div className="flex flex-col items-center mb-8">
+        <div className="relative group">
+          <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-lg bg-gray-100 flex items-center justify-center">
+            {formData.avatarUrl ? (
+              <img src={formData.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <User className="w-16 h-16 text-gray-300" />
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => avatarInputRef.current?.click()}
+            className="absolute bottom-1 right-1 bg-indigo-600 text-white p-2 rounded-full shadow-md hover:bg-indigo-700 transition transform hover:scale-110"
+            title="Update Avatar"
+          >
+            <Camera className="w-5 h-5" />
+          </button>
+          <input
+            type="file"
+            ref={avatarInputRef}
+            className="hidden"
+            accept="image/*"
+            onChange={handleAvatarUpload}
+          />
+        </div>
+        <div className="mt-4 w-full">
+            <label className="block text-sm font-medium text-gray-700 mb-1 text-center">Full Name</label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              className="w-full rounded-lg border border-gray-300 p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none text-center font-semibold text-lg"
+              placeholder="Your Name"
+            />
+        </div>
+      </div>
+
       {/* Section 1: Physical Metrics */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">

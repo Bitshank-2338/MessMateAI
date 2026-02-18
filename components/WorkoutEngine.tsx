@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react';
-import { Dumbbell, Home, Zap, Camera, RefreshCw, CheckCircle, Brain, Info, Upload } from 'lucide-react';
+import { Dumbbell, Home, Zap, Camera, RefreshCw, CheckCircle, Brain, Info, Upload, Mic } from 'lucide-react';
 import { UserProfile, WorkoutSession, WorkoutLocation, PhysiqueAnalysis } from '../types';
 import { generateWorkoutPlan, analyzePhysiqueDeep } from '../services/gemini';
+import { PremiumLock } from './PremiumLock';
 
 interface WorkoutEngineProps {
   profile: UserProfile;
+  onOpenLive?: () => void;
+  hasAccess?: boolean;
+  onUpgrade?: () => Promise<void>;
 }
 
 const ExerciseCard: React.FC<{ exercise: any; index: number }> = ({ exercise, index }) => (
@@ -24,7 +28,12 @@ const ExerciseCard: React.FC<{ exercise: any; index: number }> = ({ exercise, in
   </div>
 );
 
-export const WorkoutEngine: React.FC<WorkoutEngineProps> = ({ profile }) => {
+export const WorkoutEngine: React.FC<WorkoutEngineProps> = ({ 
+  profile, 
+  onOpenLive,
+  hasAccess = true, 
+  onUpgrade = async () => {} 
+}) => {
   const [location, setLocation] = useState<WorkoutLocation>('Home');
   const [plan, setPlan] = useState<WorkoutSession[]>([]);
   const [loading, setLoading] = useState(false);
@@ -58,6 +67,28 @@ export const WorkoutEngine: React.FC<WorkoutEngineProps> = ({ profile }) => {
       }
     }
   };
+
+  if (!hasAccess) {
+    return (
+      <div className="space-y-6">
+        {/* Header & Controls (Locked View) */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Brain className="w-6 h-6 text-indigo-600" />
+                Fitness Architect
+              </h2>
+              <p className="text-sm text-gray-500">
+                Personalized {profile.weight || 70}kg Recomp Protocol
+              </p>
+            </div>
+          </div>
+        </div>
+        <PremiumLock featureName="Gym Planner & Analysis" onUpgrade={onUpgrade} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -120,6 +151,16 @@ export const WorkoutEngine: React.FC<WorkoutEngineProps> = ({ profile }) => {
              {analyzing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
              <span className="hidden sm:inline">Physique Check</span>
           </button>
+
+          {onOpenLive && (
+             <button
+               onClick={onOpenLive}
+               className="flex-shrink-0 bg-indigo-50 text-indigo-600 px-4 py-3 rounded-xl hover:bg-indigo-100 transition shadow-sm flex items-center justify-center gap-2 font-medium"
+             >
+                <Mic className="w-5 h-5" />
+             </button>
+          )}
+
           <input 
              type="file" 
              ref={fileInputRef} 

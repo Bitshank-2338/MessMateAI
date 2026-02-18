@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
-import { CalendarDays, ChefHat, Clock, RefreshCw, AlertCircle, Zap } from 'lucide-react';
+import { CalendarDays, ChefHat, Clock, RefreshCw, AlertCircle, Zap, Mic } from 'lucide-react';
 import { DayPlan, UserProfile, MealPlanItem } from '../types';
 import { generateWeeklyMealPlan } from '../services/gemini';
+import { PremiumLock } from './PremiumLock';
 
 interface WeeklyMealPlanProps {
   profile: UserProfile;
+  onOpenLive?: () => void;
+  hasAccess?: boolean;
+  onUpgrade?: () => Promise<void>;
 }
 
-export const WeeklyMealPlan: React.FC<WeeklyMealPlanProps> = ({ profile }) => {
+export const WeeklyMealPlan: React.FC<WeeklyMealPlanProps> = ({ 
+  profile, 
+  onOpenLive, 
+  hasAccess = true, 
+  onUpgrade = async () => {} 
+}) => {
   const [plan, setPlan] = useState<DayPlan[]>(() => {
     try {
       const saved = localStorage.getItem('mahaVegMealPlan');
@@ -73,6 +82,20 @@ export const WeeklyMealPlan: React.FC<WeeklyMealPlanProps> = ({ profile }) => {
     </div>
   )};
 
+  if (!hasAccess) {
+    return (
+       <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Your Weekly Plan</h2>
+              <p className="text-gray-600 text-sm">Tailored for: <span className="font-medium text-indigo-600">{profile.cookingSetup}</span></p>
+            </div>
+          </div>
+          <PremiumLock featureName="Weekly Meal Planner" onUpgrade={onUpgrade} />
+       </div>
+    );
+  }
+
   if (!plan.length && !loading) {
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4 bg-white rounded-2xl border border-dashed border-gray-300">
@@ -99,7 +122,7 @@ export const WeeklyMealPlan: React.FC<WeeklyMealPlanProps> = ({ profile }) => {
       <div className="flex flex-col items-center justify-center py-20">
         <RefreshCw className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
         <h3 className="text-lg font-medium text-gray-800">Chef AI is cooking up your plan...</h3>
-        <p className="text-gray-500 text-sm">Considering your budget, equipment, and goals.</p>
+        <p className="text-gray-500 text-sm">Thinking heavily to optimize your macros.</p>
       </div>
     );
   }
@@ -137,13 +160,24 @@ export const WeeklyMealPlan: React.FC<WeeklyMealPlanProps> = ({ profile }) => {
           <h2 className="text-2xl font-bold text-gray-900">Your Weekly Plan</h2>
           <p className="text-gray-600 text-sm">Tailored for: <span className="font-medium text-indigo-600">{profile.cookingSetup}</span></p>
         </div>
-        <button
-          onClick={handleGenerate}
-          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 bg-indigo-50 px-3 py-2 rounded-lg transition"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Regenerate Plan
-        </button>
+        <div className="flex gap-2">
+            {onOpenLive && (
+                <button
+                onClick={onOpenLive}
+                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 bg-indigo-50 px-3 py-2 rounded-lg transition"
+                >
+                <Mic className="w-4 h-4" />
+                Voice
+                </button>
+            )}
+            <button
+            onClick={handleGenerate}
+            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 bg-indigo-50 px-3 py-2 rounded-lg transition"
+            >
+            <RefreshCw className="w-4 h-4" />
+            Regenerate Plan
+            </button>
+        </div>
       </div>
 
       {error && (
